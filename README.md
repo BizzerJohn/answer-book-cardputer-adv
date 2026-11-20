@@ -1,6 +1,6 @@
-# Cardputer ADV 四件套：答案之书 / 易经 / 二选一 / 口袋宠物
+# Cardputer ADV 五件套：答案之书 / 易经 / 二选一 / 口袋宠物 / 骰子硬币
 
-四个可以装进 **M5Launcher** 的独立应用，共用一套显示 / 键盘 / 字体 / 摇一摇基础设施：
+五个可以装进 **M5Launcher** 的独立应用，共用一套显示 / 键盘 / 字体 / 摇一摇基础设施：
 
 | 应用 | 说明 |
 |---|---|
@@ -8,8 +8,9 @@
 | **易经 · 六爻** `iching` | 三枚铜钱掷六次，本卦 + 动爻 + 之卦 |
 | **二选一决策器** `decider` | 两个选项放上天平，给出倾向与一句理由 |
 | **口袋宠物** `pocketpet` | 原创 32×32 像素宠物：墨丸 → 砚兽 → 墨麟，养成 / 小游戏 / 对战 / 进化 / 存档 |
+| **骰子与硬币** `dice` | 摇一摇或按键掷 1–3 颗骰子、抛硬币，带统计与持久化 |
 
-四个都是离线应用：不联网、不依赖 SD 卡（答案包的 SD 功能除外），插不插卡都能启动。
+五个都是离线应用：不联网、不依赖 SD 卡（答案包的 SD 功能除外），插不插卡都能启动。
 
 ![封面](tools/screen_cover.png)
 ![答案页](tools/screen_answer.png)
@@ -21,8 +22,8 @@
 
 ```
 answer-book/
-├── platformio.ini          # 四个 env：answer-book / iching / decider / pocketpet
-├── dist/                   # 已编译好的四个 bin
+├── platformio.ini          # 五个 env：answer-book / iching / decider / pocketpet / dice
+├── dist/                   # 已编译好的五个 bin
 ├── sdcard/answerbook/      # 主题答案包示例，拷到 SD 卡即可
 ├── tools/
 │   ├── gen_font.py         # 扫源码 + GB2312 一级字库 → src/core/font_data.h
@@ -36,12 +37,13 @@ answer-book/
         ├── answer_book/    # 答案之书
         ├── iching/         # 易经六爻
         ├── decider/        # 二选一
-        └── pocketpet/      # 口袋宠物
+        ├── pocketpet/      # 口袋宠物
+        └── dice/           # 骰子与硬币
 ```
 
 ---
 
-## 2. 四个应用怎么玩
+## 2. 五个应用怎么玩
 
 ### 2.1 答案之书
 
@@ -90,7 +92,22 @@ answer-book/
 - **存档**：NVS，自动每 15 秒存一次；关机再开会按“睡了一觉”结算少量衰减。
 - **命名**：设置 → 改名（键盘只能输入字母数字）。
 
-### 2.4 二选一决策器
+### 2.4 骰子与硬币
+
+| 按键 | 作用 |
+|---|---|
+| `Enter` / `Space` / **摇一摇** | 掷骰子 / 抛硬币 |
+| `,` `.` `;` `/`（左右） | 切换「骰子 / 硬币」 |
+| 上下 | 骰子模式下改数量（1–3 颗） |
+| `H` | 统计页（骰子点数分布 / 硬币正反次数） |
+| `S` | 设置（音效 / 亮度） |
+
+- 骰子：1–3 颗，多颗时显示合计；掷动时骰子翻滚，落定有音效。
+- 硬币：字 / 花，翻转时用椭圆缩放模拟旋转。
+- 统计：每面出现次数、骰子与硬币局数，写入 NVS，重启保留。
+- 摇一摇与按键并行，随时都能掷。
+
+### 2.5 二选一决策器
 
 1. 封面按 `1` / `2` 给 A/B 命名（键盘只能输入字母数字，留空用默认「选项一/二」）。
 2. `Enter` 开始权衡：天平会向结果倾斜，并给出倾向百分比与一句理由。
@@ -137,11 +154,12 @@ AnswerBook_CardputerADV_v1.2.1.bin
 IChing_CardputerADV_v1.0.1.bin
 Decider_CardputerADV_v1.0.bin
 PocketPet_CardputerADV_v1.0.bin
+Dice_CardputerADV_v1.0.bin
 ```
 
 拷到 SD 卡的 `/downloads/`，设备上进 **Launcher → SD → downloads**，逐个 Install。也可以用 Launcher 的 WebUI 上传。
 
-四个应用彼此独立，Launcher 里会显示成四个条目；每个约 1MB。
+五个应用彼此独立，Launcher 里会显示成五个条目；每个约 1MB。
 
 > **Flash 预算提醒**：8MB 里 Launcher 自己占 1.31MB，Bruce 占 4.35MB，剩下约 2.2MB，只够装 **两个** 1MB 级应用。想装第三个/第四个，先删掉 Bruce 或在 Launcher 里删除旧版本的重复条目（每次 Install 都会新建分区，不会覆盖）。
 
@@ -185,6 +203,7 @@ pio run -e decider
 | 易经 · 六爻 v1.0.1 | 1,027,136 B | 1,026,777 B（30.7%） |
 | 二选一 | 1,031,168 B | 1,030,801 B（30.8%） |
 | 口袋宠物 v1.0 | 1,046,128 B | 1,045,765 B（31.3%） |
+| 骰子与硬币 v1.0 | 1,029,504 B | 1,029,137 B（30.8%） |
 
 其中字库约 435KB（16px + 24px，3872 个字符）——这是为了让 SD 答案包能写常用汉字。
 
