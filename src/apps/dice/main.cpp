@@ -80,7 +80,7 @@ static void drawDie(int x, int y, int size, int face) {
 
     // 每个点数用到的位置索引（0 左上 / 1 左中 / 2 左下 / 3 中心 / 4 右上 / 5 右中 / 6 右下）
     static const uint8_t masks[7][6] = {
-        {0}, {3}, {0, 6}, {0, 3, 6}, {0, 2, 5, 6}, {0, 2, 3, 5, 6}, {0, 1, 2, 4, 5, 6},
+        {0}, {3}, {0, 6}, {0, 3, 6}, {0, 2, 4, 6}, {0, 2, 3, 4, 6}, {0, 1, 2, 4, 5, 6},
     };
     static const uint8_t counts[7] = {0, 1, 2, 3, 4, 5, 6};
     for (int i = 0; i < counts[face]; ++i) {
