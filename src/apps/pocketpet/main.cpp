@@ -8,6 +8,7 @@
 
 #include "cjk_font.h"
 #include "keyboard_adv.h"
+#include "sprites.h"
 #include "ui.h"
 
 using ui::canvas;
@@ -43,7 +44,7 @@ static uint32_t toastUntil = 0;
 static char toast[40] = "";
 static bool loadedSave = false;
 
-static const char* STAGE_NAMES[3] = {"墨团", "墨灵", "墨麒麟"};
+static const char* STAGE_NAMES[3] = {"墨丸", "砚兽", "墨麟"};
 
 // 菜单
 static int menuSel = 0;
@@ -70,6 +71,7 @@ static uint32_t gameResultUntil = 0;
 struct Enemy {
     char name[16];
     uint16_t color;
+    int kind;
     int level, hp, maxHp, atk, def;
 };
 static Enemy enemy;
@@ -78,6 +80,10 @@ static int battleSel = 0;
 static char battleMsg[48] = "";
 static bool battleOver = false;
 static bool battleWon = false;
+static bool battleNext = false;
+static int streak = 0;
+static int petDefBuff = 0;
+static uint8_t difficulty = 1;   // 0 普通 / 1 困难
 
 // 进化
 static uint8_t evolveTo = 0;
@@ -115,6 +121,7 @@ static void savePet() {
     ui::prefs.putUShort("coins", pet.coins);
     ui::prefs.putUShort("wins", pet.wins);
     ui::prefs.putBool("sick", pet.sick);
+    ui::prefs.putUChar("diff", difficulty);
     ui::prefs.putBool("exists", true);
     lastSave = millis();
 }
@@ -123,7 +130,7 @@ static void loadPet() {
     loadedSave = ui::prefs.getBool("exists", false);
     if (!loadedSave) {
         memset(&pet, 0, sizeof(pet));
-        snprintf(pet.name, sizeof(pet.name), "墨团");
+        snprintf(pet.name, sizeof(pet.name), "墨丸");
         pet.level = 1;
         pet.hunger = 80;
         pet.mood = 80;
@@ -137,7 +144,7 @@ static void loadPet() {
         return;
     }
 
-    String n = ui::prefs.getString("name", "墨团");
+    String n = ui::prefs.getString("name", "墨丸");
     snprintf(pet.name, sizeof(pet.name), "%s", n.c_str());
     pet.stage = ui::prefs.getUChar("stage", 0);
     pet.level = ui::prefs.getUShort("level", 1);
@@ -155,6 +162,7 @@ static void loadPet() {
     pet.coins = ui::prefs.getUShort("coins", 0);
     pet.wins = ui::prefs.getUShort("wins", 0);
     pet.sick = ui::prefs.getBool("sick", false);
+    difficulty = ui::prefs.getUChar("diff", 1);
     if (pet.stage > 2) pet.stage = 2;
     if (pet.level < 1) pet.level = 1;
 
@@ -260,104 +268,113 @@ static uint16_t barColor(int v) {
     return ui::C_YES;
 }
 
-// 宠物本体：用基本图形拼出来，stage 决定体型与特征
-static void drawPetArt(int cx, int footY, int stage, int mood, bool sleeping,
-                       bool blink, bool eating, uint32_t t, float scale) {
-    const int bob = sleeping ? 0 : (int)(sinf(t * 0.003f) * 2);
-    int w = (int)((40 + stage * 8) * scale);
-    int h = (int)((36 + stage * 12) * scale);
-    int cy = footY - h / 2 + bob;
+// ---------------- 32x32 像素精灵 ----------------
+struct Palette {
+    uint16_t main, shade, outline, white, pupil, accent, ink;
+};
 
-    // 影子
-    canvas.fillEllipse(cx, footY + 3, w / 2 + 3, 4, ui::rgb(17, 25, 40));
+static const Palette PAL_PET = {
+    ui::C_PAPER, ui::rgb(206, 192, 170), ui::rgb(30, 40, 60),
+    ui::rgb(250, 248, 240), ui::rgb(22, 28, 42), ui::C_GOLD, ui::rgb(40, 50, 72)};
+static const Palette PAL_GRASS = {
+    ui::rgb(90, 170, 90), ui::rgb(66, 132, 70), ui::rgb(24, 40, 28),
+    ui::rgb(250, 248, 240), ui::rgb(22, 28, 42), ui::rgb(170, 220, 120),
+    ui::rgb(40, 70, 40)};
+static const Palette PAL_FIRE = {
+    ui::rgb(232, 120, 60), ui::rgb(190, 84, 44), ui::rgb(48, 24, 18),
+    ui::rgb(250, 248, 240), ui::rgb(30, 20, 20), ui::rgb(250, 210, 90),
+    ui::rgb(120, 50, 30)};
+static const Palette PAL_WATER = {
+    ui::rgb(90, 150, 230), ui::rgb(64, 112, 186), ui::rgb(20, 32, 50),
+    ui::rgb(250, 248, 240), ui::rgb(20, 28, 44), ui::rgb(150, 220, 240),
+    ui::rgb(40, 70, 110)};
 
-    // 尾巴
-    if (stage >= 1) {
-        int tx = cx + w / 2 - 2, ty = cy + h / 5;
-        canvas.drawLine(cx + w / 2 - 6, cy + h / 4, tx + 8, ty - 6, ui::C_GOLD_D);
-        canvas.fillCircle(tx + 9, ty - 7, 3 + stage, ui::rgb(28, 38, 58));
-    }
-
-    // 耳朵 / 角
-    if (stage == 0) {
-        int ex2 = w / 3, ey2 = cy - h / 2 + 4;
-        canvas.fillEllipse(cx - ex2, ey2, 8, 8, ui::C_PAPER);
-        canvas.fillEllipse(cx + ex2, ey2, 8, 8, ui::C_PAPER);
-        canvas.drawEllipse(cx - ex2, ey2, 8, 8, ui::rgb(60, 72, 92));
-        canvas.drawEllipse(cx + ex2, ey2, 8, 8, ui::rgb(60, 72, 92));
-    } else if (stage == 1) {
-        canvas.fillTriangle(cx - w / 3, cy - h / 2 + 4, cx - w / 3 - 6, cy - h / 2 - 16,
-                            cx - w / 3 + 8, cy - h / 2 - 6, ui::C_PAPER);
-        canvas.fillTriangle(cx + w / 3, cy - h / 2 + 4, cx + w / 3 + 6, cy - h / 2 - 16,
-                            cx + w / 3 - 8, cy - h / 2 - 6, ui::C_PAPER);
-    } else {
-        canvas.fillTriangle(cx - w / 3, cy - h / 2 + 6, cx - w / 3 - 4, cy - h / 2 - 18,
-                            cx - w / 3 + 8, cy - h / 2 - 4, ui::C_GOLD);
-        canvas.fillTriangle(cx + w / 3, cy - h / 2 + 6, cx + w / 3 + 4, cy - h / 2 - 18,
-                            cx + w / 3 - 8, cy - h / 2 - 4, ui::C_GOLD);
-    }
-
-    // 身体
-    canvas.fillEllipse(cx, cy, w / 2, h / 2, ui::C_PAPER);
-    canvas.drawEllipse(cx, cy, w / 2, h / 2, ui::rgb(60, 72, 92));
-
-    // 墨斑：额头上的一块，别盖住眼睛
-    canvas.fillEllipse(cx - w / 6, cy - h / 2 + h / 5, w / 6, h / 8,
-                       ui::rgb(30, 40, 60));
-    if (stage >= 1)
-        canvas.fillEllipse(cx + w / 4, cy + h / 5, w / 7, h / 9, ui::rgb(30, 40, 60));
-
-    // 眼睛
-    const int ex = w / 5, ey = cy - h / 12;
-    if (sleeping || blink) {
-        canvas.drawLine(cx - ex - 5, ey, cx - ex + 5, ey, ui::rgb(30, 40, 60));
-        canvas.drawLine(cx + ex - 5, ey, cx + ex + 5, ey, ui::rgb(30, 40, 60));
-    } else {
-        canvas.fillEllipse(cx - ex, ey, 6, 7, ui::rgb(25, 32, 48));
-        canvas.fillEllipse(cx + ex, ey, 6, 7, ui::rgb(25, 32, 48));
-        canvas.fillCircle(cx - ex - 1, ey - 2, 2, ui::rgb(250, 248, 240));
-        canvas.fillCircle(cx + ex - 1, ey - 2, 2, ui::rgb(250, 248, 240));
-    }
-
-    // 嘴
-    const int my = cy + h / 5;
-    if (eating) {
-        canvas.fillEllipse(cx, my, 5, 4, ui::rgb(60, 30, 40));
-    } else if (mood >= 55) {
-        canvas.drawLine(cx - 4, my - 1, cx - 1, my + 2, ui::rgb(60, 72, 92));
-        canvas.drawLine(cx - 1, my + 2, cx + 1, my + 2, ui::rgb(60, 72, 92));
-        canvas.drawLine(cx + 1, my + 2, cx + 4, my - 1, ui::rgb(60, 72, 92));
-    } else {
-        canvas.drawLine(cx - 6, my + 2, cx, my - 2, ui::rgb(60, 72, 92));
-        canvas.drawLine(cx, my - 2, cx + 6, my + 2, ui::rgb(60, 72, 92));
-    }
-
-    // 脚
-    canvas.fillEllipse(cx - w / 4, footY - 1, (int)(8 * scale) + 1, (int)(4 * scale) + 1,
-                       ui::C_PAPER);
-    canvas.fillEllipse(cx + w / 4, footY - 1, (int)(8 * scale) + 1, (int)(4 * scale) + 1,
-                       ui::C_PAPER);
-
-    if (sleeping) {
-        ui::drawAscii(canvas, cx + w / 2 + 8, cy - h / 2 - 6, "z", ui::C_MUTED, 1);
-        ui::drawAscii(canvas, cx + w / 2 + 16, cy - h / 2 - 12, "Z", ui::C_MUTED, 1);
+static uint16_t spriteColor(char c, const Palette& p) {
+    switch (c) {
+        case 'a': return p.main;
+        case 'b': return p.shade;
+        case 'o': return p.outline;
+        case 'w': return p.white;
+        case 'p': return p.pupil;
+        case 'g': return p.accent;
+        case 'c': return p.ink;
+        default: return 0;
     }
 }
 
-static void drawEnemyArt(int cx, int footY, uint16_t color, uint32_t t) {
+static void drawSprite(const Sprite& s, int x, int y, int scale, const Palette& p,
+                       bool blink) {
+    for (int row = 0; row < 32; ++row) {
+        const char* r = s.rows[row];
+        int col = 0;
+        while (col < 32) {
+            const char c = r[col];
+            if (c == '.') {
+                ++col;
+                continue;
+            }
+            int start = col;
+            while (col < 32 && r[col] == c) ++col;
+            canvas.fillRect(x + start * scale, y + row * scale,
+                            (col - start) * scale, scale, spriteColor(c, p));
+        }
+    }
+    if (blink) {
+        const int ly1 = s.eyeY1 + s.eyeH / 2;
+        canvas.fillRect(x + s.eyeX1 * scale, y + ly1 * scale, s.eyeW * scale, scale,
+                        p.outline);
+        const int ly2 = s.eyeY2 + s.eyeH / 2;
+        canvas.fillRect(x + s.eyeX2 * scale, y + ly2 * scale, s.eyeW * scale, scale,
+                        p.outline);
+    }
+}
+
+static const Sprite* const PET_SPRITES[3] = {&MOWAN, &YANSHOU, &MOLIN};
+
+static void drawPetArt(int cx, int footY, int stage, int mood, bool sleeping,
+                       bool blink, bool eating, uint32_t t, float scale) {
+    (void)eating;
+    if (stage < 0 || stage > 2) stage = 0;
+    const int px = (int)(2.0f * scale);
+    const int bob = sleeping ? 0 : (int)(sinf(t * 0.003f) * 2);
+    const int top = footY - 32 * px + bob;
+
+    canvas.fillEllipse(cx, footY + 2, 16 * px, 4, ui::rgb(17, 25, 40));
+    drawSprite(*PET_SPRITES[stage], cx - 16 * px, top, px, PAL_PET, blink);
+
+    if (mood >= 65 && !sleeping) {
+        int hx = cx + 18, hy = top - 7;
+        canvas.fillRect(hx, hy, 3, 3, ui::rgb(240, 110, 150));
+        canvas.fillRect(hx + 4, hy, 3, 3, ui::rgb(240, 110, 150));
+        canvas.fillRect(hx, hy + 3, 7, 2, ui::rgb(240, 110, 150));
+        canvas.fillRect(hx + 2, hy + 5, 3, 2, ui::rgb(240, 110, 150));
+    } else if (mood < 30) {
+        canvas.fillEllipse(cx + 22, top + 4, 2, 3, ui::C_MAYBE);
+    }
+
+    if (sleeping) {
+        ui::drawAscii(canvas, cx + 20, top - 8, "z", ui::C_MUTED, 1);
+        ui::drawAscii(canvas, cx + 28, top - 14, "Z", ui::C_MUTED, 1);
+    }
+}
+
+static const Sprite* enemySpriteFor(int kind) {
+    if (kind == 1) return &FIRE;
+    if (kind == 2) return &WATER;
+    return &GRASS;
+}
+
+static const Palette& enemyPaletteFor(int kind) {
+    if (kind == 1) return PAL_FIRE;
+    if (kind == 2) return PAL_WATER;
+    return PAL_GRASS;
+}
+
+static void drawEnemyArt(int cx, int footY, int kind, uint32_t t) {
     int bob = (int)(sinf(t * 0.005f) * 2);
-    int cy = footY - 14 + bob;
-    canvas.fillEllipse(cx, footY + 2, 18, 3, ui::rgb(17, 25, 40));
-    canvas.fillEllipse(cx, cy, 18, 16, color);
-    canvas.drawEllipse(cx, cy, 18, 16, ui::rgb(30, 40, 60));
-    canvas.fillTriangle(cx - 12, cy - 12, cx - 16, cy - 26, cx - 4, cy - 15, color);
-    canvas.fillTriangle(cx + 12, cy - 12, cx + 16, cy - 26, cx + 4, cy - 15, color);
-    canvas.fillCircle(cx - 6, cy - 2, 3, ui::rgb(250, 248, 240));
-    canvas.fillCircle(cx + 6, cy - 2, 3, ui::rgb(250, 248, 240));
-    canvas.fillCircle(cx - 5, cy - 1, 2, ui::rgb(25, 32, 48));
-    canvas.fillCircle(cx + 7, cy - 1, 2, ui::rgb(25, 32, 48));
-    canvas.drawLine(cx - 10, cy - 8, cx - 4, cy - 10, ui::rgb(25, 32, 48));
-    canvas.drawLine(cx + 10, cy - 8, cx + 4, cy - 10, ui::rgb(25, 32, 48));
+    canvas.fillEllipse(cx, footY + 2, 16, 3, ui::rgb(17, 25, 40));
+    drawSprite(*enemySpriteFor(kind), cx - 16, footY - 32 + bob, 1,
+               enemyPaletteFor(kind), false);
 }
 
 // ---------------- 主界面 ----------------
@@ -379,7 +396,10 @@ static void drawHome() {
     ui::drawAscii(canvas, 104, 32, "MOOD", ui::C_MUTED, 1);
     ui::drawAscii(canvas, 178, 32, "ENERGY", ui::C_MUTED, 1);
 
-    drawPetArt(120, 112, pet.stage, pet.mood, false, false, false, millis(), 1.0f);
+    {
+        const bool blink = ((millis() / 90) % 42 == 0);
+        drawPetArt(120, 112, pet.stage, pet.mood, false, blink, false, millis(), 1.0f);
+    }
 
     for (int i = 0; i < pet.poop && i < 3; ++i) {
         int x = 206 + i * 10;
@@ -524,22 +544,23 @@ static void drawSettings() {
     ui::drawAscii(canvas, ui::W - 52, 8, "ESC:BACK", ui::C_MUTED, 1);
     canvas.drawFastHLine(8, 22, ui::W - 16, ui::C_LINE);
 
-    static const char* labels[4] = {"音效", "亮度", "改名", "存档"};
-    char vals[4][12];
+    static const char* labels[5] = {"音效", "亮度", "难度", "改名", "存档"};
+    char vals[5][12];
     snprintf(vals[0], 12, "%s", ui::soundOn ? "ON" : "OFF");
     snprintf(vals[1], 12, "%d%%", ui::brightPct);
-    snprintf(vals[2], 12, "%s", pet.name);
-    snprintf(vals[3], 12, "SAVE");
+    snprintf(vals[2], 12, "%s", difficulty ? "HARD" : "NORMAL");
+    snprintf(vals[3], 12, "%s", pet.name);
+    snprintf(vals[4], 12, "SAVE");
 
-    for (int i = 0; i < 4; ++i) {
-        int y = 32 + i * 24;
+    for (int i = 0; i < 5; ++i) {
+        int y = 28 + i * 19;
         if (i == settingsSel) {
             canvas.fillRoundRect(6, y - 2, ui::W - 12, 20, 4, ui::rgb(24, 36, 56));
             canvas.drawRoundRect(6, y - 2, ui::W - 12, 20, 4, ui::C_GOLD_D);
         }
         cf::drawText(canvas, 16, y, labels[i],
                      i == settingsSel ? ui::C_GOLD : ui::C_PAPER, cf::font16);
-        if (i == 2) {
+        if (i == 3) {
             int tw = cf::textWidth(vals[i], cf::font16);
             cf::drawText(canvas, ui::W - 16 - tw, y, vals[i],
                          settingsSel == i ? ui::C_PAPER : ui::C_MUTED, cf::font16);
@@ -676,45 +697,65 @@ static void drawGame() {
 }
 
 // ---------------- 战斗 ----------------
+static const char* MOVE_NAMES[3][4] = {
+    {"墨点", "泼墨", "静心", "逃跑"},
+    {"笔锋", "泼墨", "砚甲", "逃跑"},
+    {"墨龙击", "泼墨", "静心", "逃跑"},
+};
+
+static int enemyHeals = 0;
+
 static void startBattle() {
-    static const char* names[3] = {"草团", "火苗", "水泡"};
-    static const uint16_t colors[3] = {ui::rgb(90, 170, 90), ui::rgb(230, 120, 60),
-                                       ui::rgb(90, 150, 230)};
-    int k = esp_random() % 3;
+    static const char* names[3] = {"野草团", "火苗", "水泡"};
+    int k = (int)(esp_random() % 3);
     snprintf(enemy.name, sizeof(enemy.name), "野生的%s", names[k]);
-    enemy.color = colors[k];
-    int lv = (int)pet.level + (int)(esp_random() % 5) - 2;
+    enemy.kind = k;
+
+    int lv;
+    if (difficulty) lv = (int)pet.level + 2 + (int)(esp_random() % 4) + streak;
+    else lv = (int)pet.level + (int)(esp_random() % 3) + streak;
     if (lv < 1) lv = 1;
     enemy.level = lv;
-    enemy.maxHp = enemy.hp = 12 + lv * 3;
-    enemy.atk = 3 + lv;
-    enemy.def = 1 + lv / 3;
+    enemy.maxHp = enemy.hp = 18 + lv * 4 + (difficulty ? 8 : 0);
+    enemy.atk = 4 + lv + (difficulty ? 1 : 0);
+    enemy.def = 2 + lv / 2;
+    enemyHeals = difficulty ? 2 : 1;
 
-    petMaxHp = 20 + pet.level * 2 + pet.str * 2;
+    petMaxHp = 30 + pet.level * 3 + pet.str * 2 + pet.stage * 6;
     petHp = petMaxHp;
+    petDefBuff = 0;
     battleSel = 0;
     battleOver = false;
     battleWon = false;
-    snprintf(battleMsg, sizeof(battleMsg), "%s 出现了！", enemy.name);
+    battleNext = false;
+
+    if (streak > 0)
+        snprintf(battleMsg, sizeof(battleMsg), "连战 %d：%s 出现了！", streak + 1,
+                 enemy.name);
+    else
+        snprintf(battleMsg, sizeof(battleMsg), "%s 出现了！", enemy.name);
     screen = S_BATTLE;
 }
 
 static void battleWin() {
     battleOver = true;
     battleWon = true;
-    int exp = 12 + enemy.level * 2;
-    int coins = 5 + esp_random() % 11;
+    ++streak;
+    int exp = 14 + enemy.level * 3 + streak * 3;
+    int coins = 6 + (int)(esp_random() % 10) + streak * 2;
     pet.coins = clamp16(pet.coins + coins);
     ++pet.wins;
     pet.mood = clamp8(pet.mood + 6);
-    snprintf(battleMsg, sizeof(battleMsg), "赢了！+%d经验 +%d币", exp, coins);
+    snprintf(battleMsg, sizeof(battleMsg), "胜利！+%d经验 +%d币", exp, coins);
     addExp(exp);
+    battleNext = (streak < 4) && (esp_random() % 100 < 45);
     savePet();
 }
 
 static void battleLose() {
     battleOver = true;
     battleWon = false;
+    streak = 0;
     pet.health = clamp8(pet.health - 12);
     pet.mood = clamp8(pet.mood - 8);
     snprintf(battleMsg, sizeof(battleMsg), "输了…带它回去休息");
@@ -724,12 +765,32 @@ static void battleLose() {
 
 static void enemyTurn() {
     if (enemy.hp <= 0) return;
-    int dmg = enemy.atk + (int)(esp_random() % 5) - 2;
-    if (dmg < 1) dmg = 1;
-    petHp -= dmg;
-    if (petHp < 0) petHp = 0;
-    char tmp[40];
-    snprintf(tmp, sizeof(tmp), "%s反击，-%d", enemy.name, dmg);
+    char tmp[48];
+
+    if (enemy.hp * 100 / enemy.maxHp < 35 && enemyHeals > 0 &&
+        (int)(esp_random() % 100) < (difficulty ? 70 : 45)) {
+        int heal = enemy.maxHp / 3;
+        enemy.hp += heal;
+        if (enemy.hp > enemy.maxHp) enemy.hp = enemy.maxHp;
+        --enemyHeals;
+        snprintf(tmp, sizeof(tmp), "对手回复了体力");
+    } else {
+        bool special = (int)(esp_random() % 100) < (difficulty ? 35 : 20);
+        int power = special ? 7 : 3;
+        if (petDefBuff > 0) power = power / 2;
+        int def = 2 + pet.level / 3 + pet.agi / 2;
+        int dmg = enemy.atk + power - def / 2 + (int)(esp_random() % 5) - 2;
+        if (dmg < 1) dmg = 1;
+        petHp -= dmg;
+        if (petHp < 0) petHp = 0;
+        if (special)
+            snprintf(tmp, sizeof(tmp), "%s吐出气息，-%d", enemy.name, dmg);
+        else
+            snprintf(tmp, sizeof(tmp), "%s撞过来，-%d", enemy.name, dmg);
+        ui::beep(420, 25);
+    }
+
+    if (petDefBuff > 0) --petDefBuff;
     snprintf(battleMsg, sizeof(battleMsg), "%s", tmp);
 }
 
@@ -737,47 +798,73 @@ static void drawBattle();
 
 static void battleMove(int m) {
     if (battleOver) return;
+    const int stage = pet.stage;
 
-    if (m == 0) {  // 撞击
-        int dmg = 4 + pet.level / 2 + pet.str + (int)(esp_random() % 4) - 1;
-        dmg -= enemy.def / 2;
-        if (dmg < 1) dmg = 1;
-        enemy.hp -= dmg;
-        if (enemy.hp < 0) enemy.hp = 0;
-        snprintf(battleMsg, sizeof(battleMsg), "撞击！造成%d点伤害", dmg);
-        ui::beep(900, 25);
-    } else if (m == 1) {  // 墨弹
-        if (pet.energy < 5) {
-            snprintf(battleMsg, sizeof(battleMsg), "精力不够，用不了墨弹");
-            return;
-        }
-        pet.energy = clamp8(pet.energy - 5);
-        int dmg = 6 + pet.level + pet.intl + (int)(esp_random() % 6);
-        dmg -= enemy.def / 2;
-        if (dmg < 1) dmg = 1;
-        enemy.hp -= dmg;
-        if (enemy.hp < 0) enemy.hp = 0;
-        snprintf(battleMsg, sizeof(battleMsg), "墨弹！造成%d点伤害", dmg);
-        ui::beep(1200, 30);
-    } else if (m == 2) {  // 休息
-        int heal = 8 + pet.level / 2;
-        petHp += heal;
-        if (petHp > petMaxHp) petHp = petMaxHp;
-        pet.energy = clamp8(pet.energy + 8);
-        snprintf(battleMsg, sizeof(battleMsg), "休息，回复%d点体力", heal);
-        ui::beep(700, 40);
-    } else {  // 逃跑
-        if (esp_random() % 100 < 60) {
+    if (m == 3) {  // 逃跑
+        if ((int)(esp_random() % 100) < 60) {
             battleOver = true;
             battleWon = false;
+            streak = 0;
             snprintf(battleMsg, sizeof(battleMsg), "成功逃走了");
             savePet();
             return;
         }
         snprintf(battleMsg, sizeof(battleMsg), "没逃掉！");
+    } else if (m == 2) {  // 辅助
+        if (stage == 1) {
+            petDefBuff = 3;
+            snprintf(battleMsg, sizeof(battleMsg), "砚甲！3 回合内受伤减半");
+            ui::beep(700, 40);
+        } else {
+            int heal = petMaxHp * 35 / 100;
+            petHp += heal;
+            if (petHp > petMaxHp) petHp = petMaxHp;
+            pet.energy = clamp8(pet.energy + 10);
+            snprintf(battleMsg, sizeof(battleMsg), "静心，回复%d点体力", heal);
+            ui::beep(760, 50);
+        }
+    } else {  // 攻击
+        int acc = 100, power = 0, cost = 0;
+        if (m == 0) {
+            if (stage == 2) {
+                power = 6 + pet.level + pet.intl;
+                acc = 80;
+                cost = 8;
+            } else {
+                power = 3 + pet.level / 2 + pet.str;
+            }
+        } else {
+            power = 7 + pet.intl;
+            acc = 85;
+            cost = 6;
+        }
+
+        if (pet.energy < cost) {
+            snprintf(battleMsg, sizeof(battleMsg), "精力不够，用不了这招");
+            return;
+        }
+        pet.energy = clamp8(pet.energy - cost);
+
+        if ((int)(esp_random() % 100) >= acc) {
+            snprintf(battleMsg, sizeof(battleMsg), "%s没有命中…",
+                     MOVE_NAMES[stage][m]);
+            ui::beep(300, 40);
+        } else {
+            int atk = 6 + pet.level + pet.str;
+            int dmg = atk + power - enemy.def / 2 + (int)(esp_random() % 5) - 2;
+            bool crit = (int)(esp_random() % 100) <
+                        ((m == 0 && stage == 1) ? 25 : 10);
+            if (crit) dmg = dmg * 3 / 2;
+            if (dmg < 1) dmg = 1;
+            enemy.hp -= dmg;
+            if (enemy.hp < 0) enemy.hp = 0;
+            snprintf(battleMsg, sizeof(battleMsg), "%s%s！-%d点",
+                     crit ? "会心！" : "", MOVE_NAMES[stage][m], dmg);
+            ui::beep(crit ? 1400 : 1000, crit ? 60 : 30);
+        }
     }
 
-    // 简易回合推进：先把这一击画出来，等一会，再让对手出手
+    // 先把这一击画出来，等一会，再让对手出手
     drawBattle();
     canvas.pushSprite(0, 0);
     delay(650);
@@ -811,14 +898,23 @@ static void drawBattle() {
     ui::drawAscii(canvas, 120, 46, buf, ui::C_MUTED, 1);
     bar(8, 60, 100, 5, petMaxHp ? petHp * 100 / petMaxHp : 0, ui::C_YES);
 
-    drawEnemyArt(190, 44, enemy.color, millis());
-    drawPetArt(190, 96, pet.stage, pet.mood, false, false, false, millis(), 0.5f);
+    drawEnemyArt(200, 48, enemy.kind, millis());
+    drawPetArt(200, 100, pet.stage, pet.mood, false, false, false, millis(), 0.5f);
+
+    // 连战 / 防御状态
+    if (streak >= 2) {
+        char st[12];
+        snprintf(st, sizeof(st), "x%d", streak);
+        ui::drawAscii(canvas, 150, 4, st, ui::C_WAIT, 1);
+    }
+    if (petDefBuff > 0) {
+        cf::drawText(canvas, 150, 58, "盾", ui::C_MAYBE, cf::font16);
+    }
 
     // 日志
     cf::drawText(canvas, 8, 70, battleMsg, ui::C_GOLD, cf::font16);
 
-    // 指令
-    static const char* moves[4] = {"撞击", "墨弹", "休息", "逃跑"};
+    // 指令（名字随阶段变化）
     for (int i = 0; i < 4; ++i) {
         int x = 6 + i * 58, y = 104;
         if (i == battleSel && !battleOver) {
@@ -827,15 +923,15 @@ static void drawBattle() {
         } else if (!battleOver) {
             canvas.drawRoundRect(x, y, 54, 22, 4, ui::C_LINE);
         }
-        cf::drawCentered(canvas, x + 27, y + 3, moves[i],
+        cf::drawCentered(canvas, x + 27, y + 3, MOVE_NAMES[pet.stage][i],
                          i == battleSel && !battleOver ? ui::C_GOLD : ui::C_MUTED,
                          cf::font16);
     }
 
     if (battleOver) {
-        ui::drawAsciiCentered(canvas, ui::W / 2, 126,
-                              battleWon ? "ENTER:CONTINUE" : "ENTER:BACK",
-                              ui::C_PAPER, 1);
+        const char* hint = "ENTER:BACK";
+        if (battleWon && battleNext) hint = "ENTER:CHAIN  ESC:HOME";
+        ui::drawAsciiCentered(canvas, ui::W / 2, 126, hint, ui::C_PAPER, 1);
     } else {
         ui::drawAsciiCentered(canvas, ui::W / 2, 126, "< > SELECT  ENTER:GO",
                               ui::C_MUTED, 1);
@@ -1013,8 +1109,8 @@ static void handleKey(const KeyEvent& ev) {
             break;
 
         case S_SETTINGS:
-            if (ev.kind == KEY_UP) settingsSel = (settingsSel + 3) % 4;
-            else if (ev.kind == KEY_DOWN) settingsSel = (settingsSel + 1) % 4;
+            if (ev.kind == KEY_UP) settingsSel = (settingsSel + 4) % 5;
+            else if (ev.kind == KEY_DOWN) settingsSel = (settingsSel + 1) % 5;
             else if (ev.kind == KEY_ESC) {
                 ui::saveSoundBright();
                 screen = S_MENU;
@@ -1028,6 +1124,10 @@ static void handleKey(const KeyEvent& ev) {
                     ui::brightPct = (uint8_t)b;
                     ui::applyBrightness();
                 } else if (settingsSel == 2) {
+                    difficulty = difficulty ? 0 : 1;
+                    ui::prefs.putUChar("diff", difficulty);
+                    toastMsg(difficulty ? "困难模式" : "普通模式");
+                } else if (settingsSel == 3) {
                     snprintf(nameBuf, sizeof(nameBuf), "%s", pet.name);
                     nameLen = strlen(nameBuf);
                     screen = S_NAME;
@@ -1070,7 +1170,17 @@ static void handleKey(const KeyEvent& ev) {
 
         case S_BATTLE:
             if (battleOver) {
-                if (confirm) screen = S_HOME;
+                if (confirm) {
+                    if (battleWon && battleNext) {
+                        startBattle();
+                    } else {
+                        streak = 0;
+                        screen = S_HOME;
+                    }
+                } else if (ev.kind == KEY_ESC) {
+                    streak = 0;
+                    screen = S_HOME;
+                }
                 break;
             }
             if (ev.kind == KEY_LEFT) battleSel = (battleSel + 3) % 4;
