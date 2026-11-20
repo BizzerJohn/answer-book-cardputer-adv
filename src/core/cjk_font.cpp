@@ -1,5 +1,7 @@
 #include "cjk_font.h"
 
+#include <esp_system.h>
+
 #include "font_data.h"
 
 namespace cf {
@@ -106,6 +108,22 @@ int drawCentered(M5Canvas& g, int cx, int y, const char* utf8, uint16_t color,
     int w = textWidth(utf8, fs);
     drawText(g, cx - w / 2, y, utf8, color, fs);
     return w;
+}
+
+int nextChar(const char* s, uint32_t& cp) {
+    return utf8Decode(s, cp);
+}
+
+uint32_t randomGlyph(uint32_t like, const FontSet& fs) {
+    if (like < 0x2E80) {
+        static const char pool[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+        return (uint32_t)pool[esp_random() % (sizeof(pool) - 1)];
+    }
+    for (int i = 0; i < 6; ++i) {
+        uint32_t cp = glyphCodeAt((int)(esp_random() % fs.count), fs);
+        if (cp >= 0x4E00 && cp <= 0x9FFF) return cp;
+    }
+    return 0x7684;  // “的”
 }
 
 uint32_t glyphCodeAt(int index, const FontSet& fs) {

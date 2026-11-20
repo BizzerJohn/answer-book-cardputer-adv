@@ -82,18 +82,18 @@ def cover(canvas, d, f16, f24):
     d.rectangle([0, 0, W, H], fill=BG)
     for y in range(0, H, 4):
         d.line([0, y, W, y], fill=BG2)
-    d.rounded_rectangle([28, 8, 28 + 184, 8 + 119], radius=9, fill=c(24, 33, 50),
+    d.rounded_rectangle([24, 6, 24 + 192, 6 + 123], radius=9, fill=c(24, 33, 50),
                         outline=GOLD_D)
-    d.rounded_rectangle([29, 9, 29 + 182, 9 + 117], radius=8, outline=GOLD)
-    d.line([50, 11, 50, 124], fill=GOLD_D)
-    d.line([52, 11, 52, 124], fill=GOLD_D)
+    d.rounded_rectangle([25, 7, 25 + 190, 7 + 121], radius=8, outline=GOLD)
+    d.line([46, 9, 46, 126], fill=GOLD_D)
+    d.line([48, 9, 48, 126], fill=GOLD_D)
 
-    f24.centered(canvas, 132, 26, "答案之书", PAPER)
     small = ImageFont.load_default()
-    draw_ascii(d, 132 - len("THE BOOK OF ANSWERS") * 3, 58, "THE BOOK OF ANSWERS", MUTED, small)
-    d.line([132 - 34, 74, 132 + 34, 74], fill=GOLD_D)
-    f16.centered(canvas, 132, 82, "默念你的问题", MUTED)
-    f16.centered(canvas, 132, 104, "按 ENTER 翻开", GOLD)
+    f24.centered(canvas, 130, 20, "答案之书", PAPER)
+    f16.centered(canvas, 130, 56, "主题 · 事业", GOLD)
+    f16.centered(canvas, 130, 82, "按 ENTER 或摇一摇", MUTED)
+    hint = "1-9 THEME   S SETUP   ESC BACK"
+    draw_ascii(d, 130 - len(hint) * 3, 108, hint, c(72, 86, 108), small)
     draw_ascii(d, 6, 124, "70%", MUTED, small)
 
 
@@ -106,17 +106,31 @@ def answer(canvas, d, f16, f24, text, page, tone_word, tone_color):
     d.line([8, 22, W - 8, 22], fill=c(40, 52, 72))
     d.rounded_rectangle([8, 28, W - 8, 28 + 82], radius=5, outline=c(30, 42, 60))
 
-    lines = [text]
     line_h = 24 + 2
-    start_y = (H - len(lines) * line_h) // 2 + 3
+    start_y = (H - line_h) // 2 + 3
     if start_y < 30:
         start_y = 30
-    for i, line in enumerate(lines):
-        f24.centered(canvas, W // 2, start_y + i * line_h, line, tone_color)
+    f24.centered(canvas, W // 2, start_y, text, tone_color)
 
     draw_ascii(d, 8, 124, tone_word, tone_color, small)
-    hint = "ENTER:ASK   ,/.:HISTORY"
-    draw_ascii(d, W // 2 + 8 - len(hint) * 3, 124, hint, c(72, 86, 108), small)
+    hint = "SPACE:WHY   ENTER:ASK"
+    draw_ascii(d, W // 2 + 6 - len(hint) * 3, 124, hint, c(72, 86, 108), small)
+
+
+def answer_follow(canvas, d, f16, f24, text, why, page, tone_word, tone_color):
+    d.rectangle([0, 0, W, H], fill=BG)
+    f16.draw(canvas, 8, 4, "答案之书", MUTED)
+    small = ImageFont.load_default()
+    draw_ascii(d, W - 8 - 30, 8, f"P.{page:03d}", MUTED, small)
+    d.line([8, 22, W - 8, 22], fill=c(40, 52, 72))
+    d.rounded_rectangle([8, 28, W - 8, 28 + 82], radius=5, outline=c(30, 42, 60))
+
+    f16.centered(canvas, W // 2, 32, text, tone_color)
+    f16.centered(canvas, W // 2, 62, why, MUTED)
+
+    draw_ascii(d, 8, 124, tone_word, tone_color, small)
+    hint = "SPACE:BACK   ENTER:ASK"
+    draw_ascii(d, W // 2 + 6 - len(hint) * 3, 124, hint, c(72, 86, 108), small)
 
 
 def main():
@@ -141,6 +155,14 @@ def main():
     answer(canvas, d, sets[16], sets[24], "值得一试", 37, "YES", YES)
     canvas.resize((W * SCALE, H * SCALE), Image.NEAREST).save(
         os.path.join(os.path.dirname(g.PREVIEW), "screen_answer.png"))
+
+    # 追问
+    canvas = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(canvas)
+    answer_follow(canvas, d, sets[16], sets[24], "值得一试",
+                  "试错的代价，你承担得起。", 37, "YES", YES)
+    canvas.resize((W * SCALE, H * SCALE), Image.NEAREST).save(
+        os.path.join(os.path.dirname(g.PREVIEW), "screen_follow.png"))
 
     print("ok")
 

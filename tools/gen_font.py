@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "src")
-OUT = os.path.join(SRC, "font_data.h")
+OUT = os.path.join(SRC, "core", "font_data.h")
 PREVIEW = os.path.join(ROOT, "tools", "preview.png")
 
 FONT_CANDIDATES = [
@@ -42,17 +42,27 @@ def pick_font():
 def collect_chars():
     chars = set(chr(c) for c in range(0x20, 0x7F))  # 可打印 ASCII
     pattern = re.compile(r"[\u0080-\uffff]")
-    for name in os.listdir(SRC):
-        if not name.endswith((".c", ".cpp", ".h", ".hpp")):
-            continue
-        if name == "font_data.h":
-            continue
-        with open(os.path.join(SRC, name), encoding="utf-8") as f:
-            text = f.read()
-        # 跳过 // 注释和 /* */ 注释，避免把注释里的字也打进字库（宁可多收，不误收）
-        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-        text = re.sub(r"//[^\n]*", "", text)
-        chars.update(pattern.findall(text))
+    for root, _dirs, files in os.walk(SRC):
+        for name in files:
+            if not name.endswith((".c", ".cpp", ".h", ".hpp")):
+                continue
+            if name == "font_data.h":
+                continue
+            with open(os.path.join(root, name), encoding="utf-8") as f:
+                text = f.read()
+            # 跳过 // 注释和 /* */ 注释，避免把注释里的字也打进字库
+            text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+            text = re.sub(r"//[^\n]*", "", text)
+            chars.update(pattern.findall(text))
+    # \u4e3b\u9898\u7b54\u6848\u5305\u662f\u7528\u6237\u5728 SD \u5361\u4e0a\u5199\u7684\uff0c\u5b57\u5e93\u5fc5\u987b\u8986\u76d6\u5e38\u7528\u5b57\u3002
+    # GB2312 \u4e00\u7ea7\u5b57\u5e93 = 3755 \u4e2a\u6700\u5e38\u7528\u6c49\u5b57\uff0c\u8db3\u4ee5\u5e94\u4ed8\u7edd\u5927\u591a\u6570\u81ea\u5199\u7b54\u6848\u3002
+    for hi in range(0xB0, 0xD8):
+        for lo in range(0xA1, 0xFF):
+            try:
+                chars.add(bytes([hi, lo]).decode("gb2312"))
+            except UnicodeDecodeError:
+                pass
+
     chars.discard("\ufeff")
     return sorted(chars, key=ord)
 

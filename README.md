@@ -1,172 +1,188 @@
-# 答案之书 · Cardputer ADV
+# 答案之书三件套 · Cardputer ADV
 
-把纸质《答案之书》做成 Cardputer ADV 上的一个独立应用：心里默念一个只能用「是/否/要不要」回答的问题，按 Enter 翻书，得到一个答案。
+三个可以装进 **M5Launcher** 的独立应用，共用一套显示 / 键盘 / 字体 / 摇一摇基础设施：
 
-产物是一个标准 Arduino app 镜像 `firmware.bin`，可以直接放进 **M5Launcher** 安装并从 Launcher 菜单启动，不改动 Bruce、不占用 SD 卡、不需要联网。
+| 应用 | 说明 |
+|---|---|
+| **答案之书** `answer-book` | 分类求签 + 摇一摇翻书 + 追问一次 + SD 主题答案包 |
+| **易经 · 六爻** `iching` | 三枚铜钱掷六次，本卦 + 动爻 + 之卦 |
+| **二选一决策器** `decider` | 两个选项放上天平，给出倾向与一句理由 |
+
+三个都是离线应用：不联网、不依赖 SD 卡（答案包的 SD 功能除外），插不插卡都能启动。
 
 ![封面](tools/screen_cover.png)
 ![答案页](tools/screen_answer.png)
-
-> 上面两张图由 `tools/mock_ui.py` 用固件里同一份点阵数据渲染，尺寸就是 240×135。
-
----
-
-## 1. 效果与操作
-
-| 按键 | 作用 |
-|---|---|
-| `Enter` / 空格 | 提问（封面上是「翻开」，答案页是「再问一次」） |
-| `,` `.` / `;` `/` | 打开翻书记录（ADV 上这四颗就是方向键） |
-| `S` | 设置 |
-| `` ` `` / `Backspace` | 返回上一层 |
-
-界面三块：
-
-1. **封面**：书名、英文副标题、闪烁提示、电量。
-2. **洗牌**：1~2.4 秒的翻书动画，字符从左到右逐字定格，页码同时乱跳，带轻微「嗒嗒」声。
-3. **答案页**：24px 大字 + 页码 + 语气色（绿=肯定、红=否定、黄=等一等、蓝=看情况）+ 英文语气词。
-
-设置项：音效开关、动画速度（快/中/慢）、亮度（20%~100%），写入 NVS，重启后保留。
+![追问](tools/screen_follow.png)
 
 ---
 
-## 2. 三个关键设计取舍
-
-### 2.1 为什么不直接用 M5GFX 的 `efontCN`
-`lgfx_efont_cn.c` 编译后是 MB 级体积，而 Launcher 首次给应用分配的 OTA 槽只有 **0x150000 = 1.375MB**。本项目的答案库只用到 233 个汉字，于是用 `tools/gen_font.py` 把源码里出现过的字符做成 16px + 24px 两套 1-bit 点阵：
-
-- 16px：约 8.8KB 位图
-- 24px：约 20.8KB 位图
-- 合计不到 40KB，换来了大字号和干净的排版
-
-生成脚本会扫描 `src/` 下所有源码（跳过注释），所以**改了答案库之后重跑一次脚本**即可，不用手动维护字表。
-
-### 2.2 键盘为什么自己写
-ADV 的键盘是 TCA8418（I2C 0x34，7 行 × 8 列），和初代 Cardputer 的直接 GPIO 矩阵完全不同。这里没有用 `M5Cardputer` 库（它会连带拉进 IRremote、LibSSH 等依赖），而是：
-
-- 用 `m5::In_I2C`（M5Unified 已经初始化好的内部 I2C，8/9）直接读 TCA8418；
-- **轮询 FIFO，不依赖 INT 引脚**（Launcher 的移植记录里提到过 INT 不工作的板子）；
-- 把 7×8 物理坐标换算成初代 Cardputer 的 4×14 逻辑矩阵，键位表与官方一致。
-
-### 2.3 为什么完全不碰 SD 卡和 PSRAM
-- 答案是 `const` 数组，直接留在 Flash，插拔 SD 不影响启动；
-- 全屏画布 240×135×16bpp ≈ 65KB，内部 RAM 够用，因此 `platformio.ini` 里**没有**打开 PSRAM（ADV 本来也没有）。
-
----
-
-## 3. 目录
+## 1. 目录
 
 ```
 answer-book/
-├── platformio.ini
-├── README.md
+├── platformio.ini          # 三个 env：answer-book / iching / decider
+├── dist/                   # 已编译好的三个 bin
+├── sdcard/answerbook/      # 主题答案包示例，拷到 SD 卡即可
 ├── tools/
-│   ├── gen_font.py        # 扫描源码 → 生成 src/font_data.h
-│   ├── mock_ui.py         # 用同一份点阵在电脑上 1:1 模拟界面（改版式时先看这个）
-│   ├── preview.png        # 16px 点阵预览（自检用）
-│   ├── preview_24.png     # 24px 点阵预览
-│   ├── screen_cover.png   # 封面效果图
-│   └── screen_answer.png  # 答案页效果图
+│   ├── gen_font.py         # 扫源码 + GB2312 一级字库 → src/core/font_data.h
+│   ├── gen_hexagrams.py    # 64 卦数据表
+│   └── mock_ui.py          # 电脑上 1:1 模拟界面
 └── src/
-    ├── main.cpp           # 状态机 + 全部界面
-    ├── answers.h          # 120 条内置答案
-    ├── cjk_font.h/.cpp    # UTF-8 解码、点阵绘制、按宽折行
-    ├── font_data.h        # 自动生成，勿手改
-    └── keyboard_adv.h/.cpp# TCA8418 轮询驱动
+    ├── core/               # 共用：字体渲染、TCA8418 键盘、画布/声音/摇一摇
+    └── apps/
+        ├── answer_book/    # 答案之书
+        ├── iching/         # 易经六爻
+        └── decider/        # 二选一
 ```
 
 ---
 
-## 4. 编译
+## 2. 三个应用怎么玩
 
-需要 PlatformIO Core。通用写法：
+### 2.1 答案之书
+
+| 按键 | 作用 |
+|---|---|
+| `Enter` / `Space` / **摇一摇** | 翻开 |
+| `1`–`9` | 换主题：爱情/事业/学业/财运/健康/人际/出行/选择/随便 |
+| `Space`（答案页） | 追问一次（再按收起；同一签只给一次） |
+| `,` `.` `;` `/` | 翻书记录 |
+| `S` | 设置（音效/动画/亮度/答案包/版本） |
+| `` ` `` / `Backspace` | 返回 |
+
+- 每个主题有自己的答案池；「随便」从全部答案里抽。
+- 追问会给一句“为什么”，同一签只能看一次，防止无限重抽。
+- 答案包：设置 → 答案包 → 循环切换（内置 → SD 上的包）。
+
+### 2.2 易经 · 六爻
+
+1. 封面按 `Enter`（或摇一摇）起卦。
+2. 连按 6 次 `Enter`，每次三枚铜钱：字=3、背=2，和 6/7/8/9 对应老阴/少阳/少阴/老阳。
+3. 六爻成卦后显示本卦：卦名、上下卦、一句断语。
+4. 有动爻时按 `Space` 看之卦；`Enter` 再起一卦。
+
+### 2.3 二选一决策器
+
+1. 封面按 `1` / `2` 给 A/B 命名（键盘只能输入字母数字，留空用默认「选项一/二」）。
+2. `Enter` 开始权衡：天平会向结果倾斜，并给出倾向百分比与一句理由。
+3. `Enter` 重新权衡，`Esc` 返回。
+
+> 它只是打破僵局的工具，结果不能替你做决定。
+
+---
+
+## 3. 主题答案包（SD 卡）
+
+把 `.txt` 放进 SD 卡的 `/answerbook/` 目录。文件名就是包名，也可以在第一行用 `#name` 指定。
+
+格式（每行一条，`|` 分隔）：
+
+```
+答案文本|追问解释|语气|分类
+```
+
+- **语气**：`yes` / `no` / `wait` / `maybe`
+- **分类**：`love,work,study,money,health,people,travel,choice`（逗号分隔），或 `all`
+- **追问解释**可留空；分类留空默认 `all`
+
+示例：
+
+```
+#name 打工人版
+先谈钱，再谈理想|不谈，对方就默认你接受。|yes|work
+别接这个锅|接了第一次，就会有第二次。|no|work
+```
+
+仓库里的 `sdcard/answerbook/打工人版.txt` 可以直接拷过去。
+
+**用字限制**：固件里的字库是 **GB2312 一级常用字（3755 字）+ 项目自身用字**，覆盖日常书写没问题；生僻字会显示成 `?`。如果确实需要，把答案文本临时放进源码跑一次 `tools/gen_font.py` 再编译即可扩展。
+
+---
+
+## 4. 装进 Launcher
+
+三个 bin 都在 `dist/`：
+
+```
+AnswerBook_CardputerADV_v1.2.bin
+IChing_CardputerADV_v1.0.bin
+Decider_CardputerADV_v1.0.bin
+```
+
+拷到 SD 卡的 `/downloads/`，设备上进 **Launcher → SD → downloads**，逐个 Install。也可以用 Launcher 的 WebUI 上传。
+
+三个应用彼此独立，Launcher 里会显示成三个条目；每个约 1MB，默认 1.375MB 的槽都能放下。
+
+**退出应用**：按 `RST`。你的 Launcher 是 `bootToApp=false`，重启会停在启动画面。
+
+---
+
+## 5. 编译
 
 ```bash
-# 改了答案库或界面文案后，先重生成字库（需要 Pillow + 一款中文字体）
+# 生成字库（改了任何中文文案后都要重跑）
 python tools/gen_font.py
 
-# 编译
-pio run -e cardputer-adv
+# 一次编译三个应用
+pio run
 ```
 
-Windows 上如果和我一样把工具装在独立 conda 环境里，则是：
+只编某一个：
 
 ```bash
-"E:/13.miniconda/envs/mylearning/python.exe" tools/gen_font.py
-"E:/13.miniconda/envs/pio-cardputer/python.exe" -m platformio run -e cardputer-adv
+pio run -e answer-book
+pio run -e iching
+pio run -e decider
 ```
 
-产物（本机已实测编译通过）：
+产物：
 
 ```
-.pio/build/cardputer-adv/firmware.bin   578,544 字节
+.pio/build/answer-book/firmware.bin
+.pio/build/iching/firmware.bin
+.pio/build/decider/firmware.bin
 ```
 
-镜像头是 `E9 05 02 3F …`，即标准 ESP32-S3 app image，可直接交给 Launcher。
+三个都是**普通 app 镜像**（0xE9 开头、0x10000 基址），交给 Launcher 即可，不要合并 bootloader。
 
-> 注意：`firmware.bin` 是**单纯的 app 镜像**（起始 0x10000），不是合并镜像。给 Launcher 用就传这个文件，不要自己 merge bootloader，也不要烧到 0x0。
+### 体积（实测）
+
+| 应用 | bin | Flash |
+|---|---|---|
+| 答案之书 v1.2 | 1,088,688 B | 1,088,321 B（32.6%） |
+| 易经 · 六爻 | 1,026,448 B | 1,026,089 B（30.7%） |
+| 二选一 | 1,030,576 B | 1,030,205 B（30.8%） |
+
+其中字库约 435KB（16px + 24px，3872 个字符）——这是为了让 SD 答案包能写常用汉字。
 
 ---
 
-## 5. 装进 Launcher
+## 6. 关键实现与坑
 
-**已经编译好的成品**：`dist/AnswerBook_CardputerADV_v1.0.1.bin`（578,544 字节）。直接用它，不需要重新编译。
-
-三种方式任选：
-
-1. **SD 卡（最稳）**：把 `firmware.bin` 拷到 SD 卡（你当前配置的下载目录是 `/downloads/`），设备上进 `Launcher → SD`，选中 `.bin` → Install。
-2. **WebUI**：Launcher 里开 `WUI`，电脑/手机连上后打开网页，`OTA Update` 上传 bin。
-3. **OTA**：把 bin 放到任意直链（GitHub Release 等），Launcher 的 `OTA` 里填 URL。
-
-安装时 Launcher 会自己决定装进哪个 OTA 槽、必要时重排分区。本固件实测 **578,544 字节（约 565KB）**，默认 1.375MB 的槽放得下：
-
-```
-RAM:   7.2% (23,500 / 327,680 bytes)
-Flash: 17.3% (577,949 / 3,342,336 bytes)
-```
-
-**退出应用**：按设备侧面的 `RST`。你的 Launcher 是 `bootToApp=false`，重启后会停在 Launcher 启动画面，按 `Enter` 进菜单。如果某次直接进了 App，开机时按住 `G0`（侧键）再点 RST 即可强制进 Launcher。
+| 问题 | 结论 |
+|---|---|
+| Launcher 要什么格式 | 普通 app 镜像（0x10000、写入 OTA 槽），不要合并 bootloader；首次 slot 1.375MB 是上限 |
+| 屏幕旋转 | **ADV 面板 offset_rotation = 1，必须 `setRotation(0)`**；写 1 会翻转 180° 且半屏黑 |
+| 画布 | `M5Canvas` 默认 `_psram=true`，ADV 无 PSRAM，必须 `setPsram(false)` |
+| 键盘 | TCA8418（0x34 / SDA8 / SCL9，7×8）→ 换算成 4×14 逻辑矩阵；轮询 FIFO，不依赖 INT |
+| 摇一摇 | BMI270：加速度模长偏离 1g > 0.55g，700ms 内 3 次 → 触发；串口会打印 `shake` 便于调阈值 |
+| 字库 | efontCN 编译后 MB 级会超槽 → 子集化；现在用 GB2312 一级 + 源码用字，约 435KB |
+| 多应用 | 一个 PlatformIO 工程三个 env，`build_src_filter` 各取所需，共用 `src/core` |
 
 ---
 
-## 6. 已知限制 / 排障
+## 7. 排障
 
-- **v1.0.1 修正**：ADV 面板在 M5GFX 里带 `offset_rotation = 1`，应用层必须用 `setRotation(0)`；写成 `1` 会变成内部旋转 2 → 内容翻转 180° 且只显示半屏。README 旧版写的 `setRotation(1)` 已改。
-- **尚未完整验证**（代码已通过编译，v1.0 在真机上暴露了旋转问题）。如果键盘完全没反应，优先怀疑两点：
-  1. TCA8418 没被识别：开机串口应能看到 `M5.In_I2C.scanID(0x34)` 失败；
-  2. 你的 ADV 批次 INT 引脚接了但 FIFO 行为不同：把 `keyboard_adv.cpp` 里的轮询改成读取 `REG_KEY_LCK` 计数后再读事件。
-- 答案页最多排 3 行 × 9 个汉字；答案库里目前都 ≤ 9 字，所以永远是一行。想加长答案时注意 `drawAnswerFrame()` 里的行高与起始 Y。
-- 音量固定 55，跟系统音量无关；ES8311 的 tone 很短，不会打断音乐（本应用也不放音乐）。
-- 深色主题是写死的，没有做主题切换。
+- **黑屏**：先看串口（USB CDC，115200）的 `board/rot/分辨率`；确认 `rot=0`、`240x135`。
+- **键盘无反应**：串口看 `kb=1`；为 0 说明 TCA8418 初始化失败。
+- **摇一摇太灵敏/不灵**：改 `src/core/ui.cpp` 里 `dev > 0.55f` 和 `_cross >= 3`，重新编译。
+- **答案包不出现**：确认路径是 `/answerbook/*.txt`、UTF-8 编码、文件是 FAT32 可读；启动时会扫描一次，插卡后需重启。
+- **答案包里的字显示 `?`**：生僻字不在字库，见第 3 节。
 
 ---
 
-## 7. 可以继续玩的
-
-- **SD 卡外挂答案库**：`/answerbook/answers.txt`，一行一条，支持自己写「毒舌版」「恋爱版」答案包；
-- **IMU 摇一摇**：BMI270 检测晃动 → 直接换一条答案，比按键更有仪式感；
-- **麦克风**：拍手/吹气触发（不需要识别内容，只做能量阈值）；
-- **红外**：把答案用 IR 发出去，或做成「问电视」的彩蛋；
-- **双语**：给 `Answer` 加 `en` 字段，`S` 键切换；
-- **开机动画**：Launcher 支持 boot image，可以配一张同风格的书封。
-
----
-
-## 8. 出处与致谢
-
-- 交互形态致敬 Carol Bolt 的 *The Book of Answers*；
-- 键盘坐标换算参考 M5Stack `M5Cardputer` 库（MIT）与 `bmorcelli/Launcher` 的 ADV 移植笔记；
-- `M5Unified` / `M5GFX` 均为 MIT。
-
----
-
-## 9. 授权提示（重要）
+## 8. 授权提示（重要）
 
 - 本项目的**代码**可自由参考、修改、用于个人学习。
-- **`src/font_data.h` 不在此列**：它是由 Windows 自带的「微软雅黑」子集化得到的点阵数据，属于字体衍生内容。仓库公开只是为了方便交流，**请勿将其用于商业分发**。
-- 需要干净授权时，把 `tools/gen_font.py` 里的 `FONT_CANDIDATES` 换成开源字体（本机已有 `C:\Windows\Fonts\NotoSansSC-VF.ttf`，SIL OFL 1.1），重跑脚本并重新编译即可：
-
-```bash
-"E:/13.miniconda/envs/mylearning/python.exe" tools/gen_font.py
-"E:/13.miniconda/envs/pio-cardputer/python.exe" -m platformio run -e cardputer-adv
-```
+- **`src/core/font_data.h` 不在此列**：它是由 Windows 自带的「微软雅黑」子集化得到的点阵数据，属于字体衍生内容。仓库公开只是为了方便交流，**请勿将其用于商业分发**。
+- 需要干净授权时，把 `tools/gen_font.py` 里的 `FONT_CANDIDATES` 换成开源字体（本机已有 `C:\Windows\Fonts\NotoSansSC-VF.ttf`，SIL OFL 1.1），重跑脚本并重新编译即可。

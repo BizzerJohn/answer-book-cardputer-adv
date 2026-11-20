@@ -5,7 +5,7 @@
 
 struct FontGlyph {
     uint16_t cp;
-    uint16_t offset;  // 在 bits 中的字节偏移
+    uint32_t offset;  // 在 bits 中的字节偏移
     uint8_t w;        // 字宽（也是步进）
 };
 
@@ -26,6 +26,12 @@ const FontSet& small();  // 16px
 const FontSet& large();  // 24px
 
 int charAdvance(uint32_t cp, const FontSet& fs);
+
+// 解码一个 UTF-8 字符，返回消耗的字节数。
+int nextChar(const char* s, uint32_t& cp);
+
+// 洗牌动画用：按“同类字符”生成一个随机字形（CJK→CJK，ASCII→ASCII）。
+uint32_t randomGlyph(uint32_t like, const FontSet& fs);
 int textWidth(const char* utf8, const FontSet& fs);
 
 // 以 (x, y) 为左上角绘制，返回绘制宽度。
