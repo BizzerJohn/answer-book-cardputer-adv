@@ -1,0 +1,5 @@
+.pio/
+.vscode/
+*.bak
+__pycache__/
+*.pyc
