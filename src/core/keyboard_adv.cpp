@@ -107,9 +107,19 @@ void AdvKeyboard::poll() {
         const uint8_t col = hwRow * 2 + (hwCol > 3 ? 1 : 0);
         const uint8_t row = (hwCol + 4) % 4;
 
-        if (!pressed) continue;  // 只处理按下沿
-
         char c = KEYMAP[row][col];
+
+        // 方向键的按住状态（按下和松开都更新）
+        switch (c) {
+            case ';': _upHeld = pressed; break;
+            case '.': _downHeld = pressed; break;
+            case ',': _leftHeld = pressed; break;
+            case '/': _rightHeld = pressed; break;
+            default: break;
+        }
+
+        if (!pressed) continue;  // 事件只处理按下沿
+
         KeyEvent ev;
         switch (c) {
             case '\n': ev.kind = KEY_ENTER; break;

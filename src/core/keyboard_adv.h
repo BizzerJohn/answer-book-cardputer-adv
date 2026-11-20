@@ -29,9 +29,19 @@ public:
     bool pop(KeyEvent& out);
     bool started() const { return _ok; }
 
+    // 持续按住状态（小游戏需要平滑移动）
+    bool upHeld() const { return _upHeld; }
+    bool downHeld() const { return _downHeld; }
+    bool leftHeld() const { return _leftHeld; }
+    bool rightHeld() const { return _rightHeld; }
+
 private:
     void emit(KeyEvent ev);
     bool _ok = false;
+    bool _upHeld = false;
+    bool _downHeld = false;
+    bool _leftHeld = false;
+    bool _rightHeld = false;
     uint8_t _head = 0;
     uint8_t _tail = 0;
     KeyEvent _queue[24];
