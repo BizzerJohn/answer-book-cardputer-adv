@@ -208,7 +208,7 @@ static void drawStats() {
         snprintf(buf, sizeof(buf), "骰子 %lu 次  硬币 %lu 次",
                  (unsigned long)diceRolls,
                  (unsigned long)(zhiCount + huaCount));
-        cf::drawText(canvas, 8, 112, buf, ui::C_MUTED, cf::font16);
+        cf::drawText(canvas, 8, 114, buf, ui::C_MUTED, cf::font16);
     } else {
         uint32_t maxC = zhiCount > huaCount ? zhiCount : huaCount;
         if (maxC == 0) maxC = 1;
