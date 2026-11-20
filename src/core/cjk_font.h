@@ -42,6 +42,13 @@ int drawText(M5Canvas& g, int x, int y, const char* utf8, uint16_t color,
 int drawCentered(M5Canvas& g, int cx, int y, const char* utf8, uint16_t color,
                  const FontSet& fs);
 
+// 只画前 len 个字节（用于折行后的单行，避免把后面的内容一起画出来）。
+int textWidthN(const char* utf8, int len, const FontSet& fs);
+int drawTextN(M5Canvas& g, int x, int y, const char* utf8, int len,
+              uint16_t color, const FontSet& fs);
+int drawCenteredN(M5Canvas& g, int cx, int y, const char* utf8, int len,
+                  uint16_t color, const FontSet& fs);
+
 void drawGlyph(M5Canvas& g, uint32_t cp, int x, int y, uint16_t color,
                const FontSet& fs);
 

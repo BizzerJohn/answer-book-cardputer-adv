@@ -110,6 +110,43 @@ int drawCentered(M5Canvas& g, int cx, int y, const char* utf8, uint16_t color,
     return w;
 }
 
+int textWidthN(const char* utf8, int len, const FontSet& fs) {
+    int w = 0;
+    const char* p = utf8;
+    const char* end = utf8 + len;
+    while (*p && p < end) {
+        uint32_t cp;
+        int n = utf8Decode(p, cp);
+        if (p + n > end) break;
+        w += charAdvance(cp, fs);
+        p += n;
+    }
+    return w;
+}
+
+int drawTextN(M5Canvas& g, int x, int y, const char* utf8, int len,
+              uint16_t color, const FontSet& fs) {
+    int cx = x;
+    const char* p = utf8;
+    const char* end = utf8 + len;
+    while (*p && p < end) {
+        uint32_t cp;
+        int n = utf8Decode(p, cp);
+        if (p + n > end) break;
+        drawGlyph(g, cp, cx, y, color, fs);
+        cx += charAdvance(cp, fs);
+        p += n;
+    }
+    return cx - x;
+}
+
+int drawCenteredN(M5Canvas& g, int cx, int y, const char* utf8, int len,
+                  uint16_t color, const FontSet& fs) {
+    int w = textWidthN(utf8, len, fs);
+    drawTextN(g, cx - w / 2, y, utf8, len, color, fs);
+    return w;
+}
+
 int nextChar(const char* s, uint32_t& cp) {
     return utf8Decode(s, cp);
 }

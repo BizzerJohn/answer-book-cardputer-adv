@@ -253,8 +253,8 @@ static void drawFrame(int reveal) {
         const int lineH = cf::font16.height + 2;
         int y = 58;
         for (int i = 0; i < n && y < 104; ++i) {
-            cf::drawCentered(canvas, ui::W / 2, y, whyText + lines[i].start,
-                             ui::C_MUTED, cf::font16);
+            cf::drawCenteredN(canvas, ui::W / 2, y, whyText + lines[i].start,
+                              lines[i].len, ui::C_MUTED, cf::font16);
             y += lineH;
         }
     }
@@ -331,7 +331,7 @@ static void drawSettings() {
     snprintf(values[1], 16, "%s", animLevel == 0 ? "FAST" : animLevel == 1 ? "MID" : "SLOW");
     snprintf(values[2], 16, "%d%%", ui::brightPct);
     snprintf(values[3], 16, "%s", packIndex >= 0 ? packs::name(packIndex) : "BUILT-IN");
-    snprintf(values[4], 16, "v1.2");
+    snprintf(values[4], 16, "v1.2.1");
 
     for (int i = 0; i < SETTINGS_N; ++i) {
         int y = 32 + i * 19;

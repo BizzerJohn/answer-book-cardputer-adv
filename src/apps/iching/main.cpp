@@ -243,8 +243,8 @@ static void drawResult() {
     int n = cf::wrapText(h->reading, cf::font16, ui::W - 94, linesp, 4);
     int y = 78;
     for (int i = 0; i < n && y < 112; ++i) {
-        cf::drawText(canvas, 88, y, h->reading + linesp[i].start, ui::C_MUTED,
-                     cf::font16);
+        cf::drawTextN(canvas, 88, y, h->reading + linesp[i].start,
+                      linesp[i].len, ui::C_MUTED, cf::font16);
         y += cf::font16.height + 2;
     }
 
