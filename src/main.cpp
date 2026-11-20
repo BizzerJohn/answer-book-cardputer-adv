@@ -366,7 +366,7 @@ static void drawSettings() {
     snprintf(values[0], 16, "%s", soundOn ? "ON" : "OFF");
     snprintf(values[1], 16, "%s", animLevel == 0 ? "FAST" : animLevel == 1 ? "MID" : "SLOW");
     snprintf(values[2], 16, "%d%%", brightPct);
-    snprintf(values[3], 16, "v1.0");
+    snprintf(values[3], 16, "v1.0.1");
 
     for (int i = 0; i < SETTINGS_N; ++i) {
         int y = 34 + i * 22;
@@ -496,7 +496,10 @@ void setup() {
     auto cfg = M5.config();
     M5.begin(cfg);
 
-    M5.Display.setRotation(1);
+    // Cardputer ADV 的面板在 M5GFX 里带 offset_rotation = 1：
+    // 用户层 rotation 0 才是“自然横屏”，传 1 会变成内部 2（内容翻转 180°，
+    // 且偏移只对内部 1 正确 → 出现半屏黑）。所以这里必须用 0。
+    M5.Display.setRotation(0);
     M5.Display.setColorDepth(16);
     M5.Display.fillScreen(TFT_BLACK);
 
@@ -521,6 +524,11 @@ void setup() {
     canvas.fillScreen(C_BG);
 
     keyboard.begin();
+
+    // 真机排障用：串口（USB CDC，115200）能看到板型、旋转、分辨率和键盘状态。
+    Serial.printf("[abook] board=%d rot=%d %dx%d kb=%d\n", (int)M5.getBoard(),
+                  (int)M5.Display.getRotation(), (int)M5.Display.width(),
+                  (int)M5.Display.height(), keyboard.started() ? 1 : 0);
 
     lastActivity = millis();
     bootAt = millis();

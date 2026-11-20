@@ -99,7 +99,7 @@ Windows 上如果和我一样把工具装在独立 conda 环境里，则是：
 产物（本机已实测编译通过）：
 
 ```
-.pio/build/cardputer-adv/firmware.bin   578,320 字节
+.pio/build/cardputer-adv/firmware.bin   578,544 字节
 ```
 
 镜像头是 `E9 05 02 3F …`，即标准 ESP32-S3 app image，可直接交给 Launcher。
@@ -110,7 +110,7 @@ Windows 上如果和我一样把工具装在独立 conda 环境里，则是：
 
 ## 5. 装进 Launcher
 
-**已经编译好的成品**：`dist/AnswerBook_CardputerADV_v1.0.bin`（578,320 字节）。直接用它，不需要重新编译。
+**已经编译好的成品**：`dist/AnswerBook_CardputerADV_v1.0.1.bin`（578,544 字节）。直接用它，不需要重新编译。
 
 三种方式任选：
 
@@ -118,7 +118,7 @@ Windows 上如果和我一样把工具装在独立 conda 环境里，则是：
 2. **WebUI**：Launcher 里开 `WUI`，电脑/手机连上后打开网页，`OTA Update` 上传 bin。
 3. **OTA**：把 bin 放到任意直链（GitHub Release 等），Launcher 的 `OTA` 里填 URL。
 
-安装时 Launcher 会自己决定装进哪个 OTA 槽、必要时重排分区。本固件实测 **578,320 字节（约 565KB）**，默认 1.375MB 的槽放得下：
+安装时 Launcher 会自己决定装进哪个 OTA 槽、必要时重排分区。本固件实测 **578,544 字节（约 565KB）**，默认 1.375MB 的槽放得下：
 
 ```
 RAM:   7.2% (23,500 / 327,680 bytes)
@@ -131,7 +131,8 @@ Flash: 17.3% (577,949 / 3,342,336 bytes)
 
 ## 6. 已知限制 / 排障
 
-- **尚未在真机上验证**（代码已通过编译）。如果键盘完全没反应，优先怀疑两点：
+- **v1.0.1 修正**：ADV 面板在 M5GFX 里带 `offset_rotation = 1`，应用层必须用 `setRotation(0)`；写成 `1` 会变成内部旋转 2 → 内容翻转 180° 且只显示半屏。README 旧版写的 `setRotation(1)` 已改。
+- **尚未完整验证**（代码已通过编译，v1.0 在真机上暴露了旋转问题）。如果键盘完全没反应，优先怀疑两点：
   1. TCA8418 没被识别：开机串口应能看到 `M5.In_I2C.scanID(0x34)` 失败；
   2. 你的 ADV 批次 INT 引脚接了但 FIFO 行为不同：把 `keyboard_adv.cpp` 里的轮询改成读取 `REG_KEY_LCK` 计数后再读事件。
 - 答案页最多排 3 行 × 9 个汉字；答案库里目前都 ≤ 9 字，所以永远是一行。想加长答案时注意 `drawAnswerFrame()` 里的行高与起始 Y。
