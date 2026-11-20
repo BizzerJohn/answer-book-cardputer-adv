@@ -29,6 +29,7 @@ static bool pendingMoving = false;
 static uint8_t coins[3];
 static uint32_t animStart = 0;
 static bool animating = false;
+static bool hasThrown = false;
 
 static const Hexagram* ben = nullptr;
 static const Hexagram* bian = nullptr;
@@ -58,6 +59,7 @@ static void startReading() {
     memset(moving, 0, sizeof(moving));
     throwIndex = 0;
     animating = false;
+    hasThrown = false;
     hasChange = false;
     showBian = false;
     ben = bian = nullptr;
@@ -75,6 +77,7 @@ static void rollOne() {
     pendingMoving = (sum == 6 || sum == 9);
     animStart = millis();
     animating = true;
+    hasThrown = true;
 }
 
 static void commitLine() {
@@ -157,12 +160,10 @@ static int coinsSum() {
     return s;
 }
 
-static void drawCoin(int x, int y, bool face, bool spinning) {
+static void drawCoin(int x, int y, const char* face, uint16_t color) {
     canvas.drawCircle(x, y, 13, ui::C_GOLD);
     canvas.drawCircle(x, y, 12, ui::C_GOLD_D);
-    uint16_t c = face ? ui::C_GOLD : ui::C_PAPER;
-    cf::drawCentered(canvas, x, y - 8, face ? "字" : "背", c, cf::font16);
-    (void)spinning;
+    cf::drawCentered(canvas, x, y - 8, face, color, cf::font16);
 }
 
 static void drawThrow(uint32_t now) {
@@ -182,8 +183,20 @@ static void drawThrow(uint32_t now) {
     // 右：三枚铜钱
     const bool spin = animating;
     for (int i = 0; i < 3; ++i) {
-        bool face = spin ? ((now / 70 + i) & 1) : coins[i];
-        drawCoin(138 + i * 34, 62, face, spin);
+        const char* face;
+        uint16_t col;
+        if (spin) {
+            bool up = ((now / 70 + i) & 1) != 0;
+            face = up ? "字" : "背";
+            col = up ? ui::C_GOLD : ui::C_PAPER;
+        } else if (!hasThrown) {
+            face = "?";
+            col = ui::C_MUTED;
+        } else {
+            face = coins[i] ? "字" : "背";
+            col = coins[i] ? ui::C_GOLD : ui::C_PAPER;
+        }
+        drawCoin(138 + i * 34, 62, face, col);
     }
 
     if (!animating && throwIndex < 6) {
